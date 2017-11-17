@@ -1,8 +1,9 @@
-(ns cassandra-intro.core)
-(require '[qbits.alia :as alia]
-         '[clojure.java.io :as io])
+(ns cassandra-intro.core
+  (:require [qbits.alia :as alia]
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
-;https://docs.datastax.com/en/cql/3.1/cql/cql_reference/create_keyspace_r.html
+;; https://docs.datastax.com/en/cql/3.1/cql/cql_reference/create_keyspace_r.html
 
 (def cluster (alia/cluster {:contact-points ["localhost"]}))
 (def session (alia/connect cluster))
@@ -23,17 +24,19 @@
 
                         PRIMARY KEY (sourceid, mean_travel_time, dst_id));"))
 
+(defn query-str [vals]
+  (str "INSERT INTO uber.trips
+        (sourceid,dstid,hod,mean_travel_time,standard_deviation_travel_time,geometric_mean_travel_time,geometric_standard_deviation_travel_time)
+        VALUES ("
+       (str/join ", " vals)
+       ");"))
+
 (defn read-csv []
   (println "reading csv")
-  (let
-    [csv-data (with-open [reader (io/reader "test.csv")]
-                (doall (line-seq reader)))]
-    (doseq [x (drop 2 csv-data)]
-      (println x)
-      (def querystr (str "INSERT INTO uber.trips
-                            (sourceid,dstid,hod,mean_travel_time,standard_deviation_travel_time,geometric_mean_travel_time,geometric_standard_deviation_travel_time)
-                            VALUES (" x ");"))
-      (alia/execute session querystr))))
+  (with-open [reader (io/reader (io/resource "test.csv"))]
+    (->> (drop (line-seq reader) 2)
+         (map query-str)
+         (run! (partial alia/execute session)))))
 
 (defn -main []
   (create-keyspace)
